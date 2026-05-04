@@ -4,7 +4,6 @@ import { Seo } from "../components/Seo";
 import { MenuItemCard } from "../components/MenuItemCard";
 import { Button } from "../components/ui/Button";
 import { useCartStore } from "../store/cartStore";
-
 const categories = [
   { id: "all", label: "All" },
   { id: "mains", label: "Mains" },
@@ -12,7 +11,6 @@ const categories = [
   { id: "vegan", label: "Vegan" },
   { id: "drinks", label: "Drinks" },
 ];
-
 export function Menu() {
   const [items, setItems] = useState([]);
   const [cat, setCat] = useState("all");
@@ -20,7 +18,6 @@ export function Menu() {
   const [spicyOnly, setSpicyOnly] = useState(false);
   const [popularOnly, setPopularOnly] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
-
   useEffect(() => {
     const params = {};
     if (cat !== "all") params.category = cat;
@@ -29,15 +26,16 @@ export function Menu() {
     if (popularOnly) params.popular = true;
     api
       .get("/api/menu", { params })
-      .then((res) => setItems(res.data))
+      .then((res) => {
+        const data = res.data;
+        setItems(Array.isArray(data) ? data : []);
+      })
       .catch(() => setItems([]));
   }, [cat, veganOnly, spicyOnly, popularOnly]);
-
   const title = useMemo(
     () => "Full Menu | Boon Supreme Restaurant Nairobi",
     []
   );
-
   return (
     <>
       <Seo
@@ -53,7 +51,6 @@ export function Menu() {
           Everything is cooked to order. Tap filters to explore vegan, spicy, and
           crowd favourites.
         </p>
-
         <div className="mt-8 flex flex-wrap gap-2 border-b border-brand-green/10 pb-4">
           {categories.map((c) => (
             <Button
@@ -69,16 +66,11 @@ export function Menu() {
             </Button>
           ))}
         </div>
-
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             size="sm"
             variant={veganOnly ? "default" : "outline"}
-            className={
-              veganOnly
-                ? ""
-                : "border-brand-green/20 text-brand-green-deep bg-white"
-            }
+            className={veganOnly ? "" : "border-brand-green/20 text-brand-green-deep bg-white"}
             onClick={() => setVeganOnly((v) => !v)}
           >
             Vegan
@@ -86,11 +78,7 @@ export function Menu() {
           <Button
             size="sm"
             variant={spicyOnly ? "default" : "outline"}
-            className={
-              spicyOnly
-                ? ""
-                : "border-brand-green/20 text-brand-green-deep bg-white"
-            }
+            className={spicyOnly ? "" : "border-brand-green/20 text-brand-green-deep bg-white"}
             onClick={() => setSpicyOnly((v) => !v)}
           >
             Spicy
@@ -98,17 +86,12 @@ export function Menu() {
           <Button
             size="sm"
             variant={popularOnly ? "default" : "outline"}
-            className={
-              popularOnly
-                ? ""
-                : "border-brand-green/20 text-brand-green-deep bg-white"
-            }
+            className={popularOnly ? "" : "border-brand-green/20 text-brand-green-deep bg-white"}
             onClick={() => setPopularOnly((v) => !v)}
           >
             Popular
           </Button>
         </div>
-
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
             <MenuItemCard key={item._id} item={item} onAdd={addItem} />

@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-green-deep: #0f3a2e;
+  --brand-green: #1f6b4a;
+  --brand-gold: #e0a93b;
+  --brand-cream: #fdf7ec;
+  --brand-terracotta: #c9633e;
+  --gradient-hero: linear-gradient(
+    135deg,
+    rgba(15, 58, 46, 0.85),
+    rgba(15, 58, 46, 0.55) 50%,
+    rgba(15, 58, 46, 0.85)
+  );
+  --gradient-gold: linear-gradient(135deg, #e0a93b, #f2c76a);
+  --gradient-warm: linear-gradient(180deg, #fdf7ec, #f6e9ce);
+  --shadow-warm: 0 20px 40px -20px rgba(224, 169, 59, 0.45);
+}
+
+@layer base {
+  body {
+    @apply font-sans text-brand-green-deep bg-brand-cream antialiased;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out both;
+}
+
+@keyframes steam-rise {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateY(-120px) translateX(-15px) scale(1.6);
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateY(-260px) translateX(20px) scale(2.4);
+    opacity: 0;
+  }
+}
+
+.steam {
+  position: absolute;
+  bottom: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0) 70%
+  );
+  filter: blur(14px);
+  animation: steam-rise 5s ease-in infinite;
+}

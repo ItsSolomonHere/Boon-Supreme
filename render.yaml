@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: boon-supreme-api
+    env: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile
+    startCommand: pnpm --filter server start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: CLIENT_URL
+        sync: false
+
+  - type: web
+    name: boon-supreme-web
+    env: static
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter client build
+    staticPublishPath: client/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false

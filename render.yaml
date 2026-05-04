@@ -1,8 +1,9 @@
+cat > render.yaml << 'EOF'
 services:
   - type: web
     name: boon-supreme-api
     env: node
-    plan: free
+    plan: starter
     buildCommand: pnpm install --frozen-lockfile
     startCommand: pnpm --filter server start
     autoDeploy: true
@@ -23,11 +24,9 @@ services:
         value: gpt-4o-mini
       - key: CLIENT_URL
         sync: false
-
   - type: web
     name: boon-supreme-web
     env: static
-    plan: free
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter client build
     staticPublishPath: client/dist
     routes:
@@ -37,3 +36,4 @@ services:
     envVars:
       - key: VITE_API_URL
         sync: false
+EOF

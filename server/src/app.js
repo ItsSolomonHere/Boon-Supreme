@@ -15,23 +15,28 @@ const app = express();
 
 const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .split(",")
-  .map((s) => s.trim())
+  .map((s) => s.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      const clean = origin.replace(/\/$/, "");
+      if (allowedOrigins.includes(clean)) return callback(null, true);
+      console.log("CORS blocked:", origin, "Allowed:", allowedOrigins);
       return callback(new Error("CORS blocked for this origin"));
     },
     credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(cookieParser());
 app.use(morgan("dev"));
 app.use(requestLogger);
+
+app.get("/ping", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/api/menu", menuRoutes);
 app.use("/api/orders", orderRoutes);
@@ -45,5 +50,4 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use(errorHandler);
-
 export default app;

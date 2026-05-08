@@ -5,6 +5,7 @@ import {
   getOrder,
   listOrders,
   updateOrderStatus,
+  deleteOrder,
 } from "../controllers/orderController.js";
 import { auth, requireAuth } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
@@ -12,14 +13,10 @@ import { requireAdmin } from "../middleware/requireAdmin.js";
 const router = Router();
 
 const orderCreateSchema = z.object({
-  items: z
-    .array(
-      z.object({
-        menuItemId: z.string().min(1),
-        qty: z.number().int().positive(),
-      })
-    )
-    .min(1),
+  items: z.array(z.object({
+    menuItemId: z.string().min(1),
+    qty: z.number().int().positive(),
+  })).min(1),
   customer: z.object({
     name: z.string().min(1),
     phone: z.string().min(1),
@@ -41,22 +38,14 @@ function validateBody(schema) {
 }
 
 router.post("/", validateBody(orderCreateSchema), createOrder);
-
 router.get("/", auth, requireAuth, requireAdmin, listOrders);
-
-router.patch(
-  "/:id/status",
-  auth,
-  requireAuth,
-  requireAdmin,
-  validateBody(
-    z.object({
-      status: z.enum(["pending", "preparing", "out_for_delivery", "delivered"]),
-    })
-  ),
+router.patch("/:id/status", auth, requireAuth, requireAdmin,
+  validateBody(z.object({
+    status: z.enum(["pending", "preparing", "out_for_delivery", "delivered"]),
+  })),
   updateOrderStatus
 );
-
+router.delete("/:id", auth, requireAuth, requireAdmin, deleteOrder);
 router.get("/:id", getOrder);
 
 export default router;

@@ -63,3 +63,13 @@ export async function updateOrderStatus(req, res, next) {
     next(e);
   }
 }
+
+export async function deleteOrder(req, res, next) {
+  try {
+    const order = await Order.findByIdAndDelete(req.params.id);
+    if (!order) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+}

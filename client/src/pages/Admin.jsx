@@ -1,304 +1,254 @@
-import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
-import { toast } from "sonner";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "../api/client";
-import { Seo } from "../components/Seo";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { Dialog } from "../components/ui/Dialog";
 import { useAuthStore } from "../store/authStore";
+import { useNavigate } from "react-router-dom";
 
-const emptyItem = {
-  name: "",
-  slug: "",
-  description: "",
-  priceKES: 400,
-  category: "mains",
-  image: "",
-  popular: false,
-  vegan: false,
-  spicy: false,
+const STATUS_FLOW = ["pending", "preparing", "out_for_delivery", "delivered"];
+
+const STATUS_COLORS = {
+  pending: "bg-yellow-100 text-yellow-800",
+  preparing: "bg-blue-100 text-blue-800",
+  out_for_delivery: "bg-purple-100 text-purple-800",
+  delivered: "bg-green-100 text-green-800",
+};
+
+const STATUS_LABELS = {
+  pending: "🆕 New",
+  preparing: "👨‍🍳 Preparing",
+  out_for_delivery: "🛵 Out for Delivery",
+  delivered: "✅ Delivered",
+};
+
+const NEXT_ACTION = {
+  pending: { label: "Accept & Prepare", next: "preparing" },
+  preparing: { label: "Mark Out for Delivery", next: "out_for_delivery" },
+  out_for_delivery: { label: "Mark Delivered", next: "delivered" },
 };
 
 export function Admin() {
-  const user = useAuthStore((s) => s.user);
-  const loading = useAuthStore((s) => s.loading);
-  const [menu, setMenu] = useState([]);
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyItem);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  async function load() {
+  const fetchOrders = useCallback(async () => {
     try {
-      const [m, o] = await Promise.all([
-        api.get("/api/menu"),
-        api.get("/api/orders"),
-      ]);
-      setMenu(m.data);
-      setOrders(o.data);
-    } catch {
-      toast.error("Could not load admin data.");
+      const res = await api.get("/api/orders");
+      setOrders(res.data);
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    if (user?.role === "admin") load();
-  }, [user]);
+    if (!user) { navigate("/login"); return; }
+    if (user.role !== "admin") { navigate("/"); return; }
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 10000);
+    return () => clearInterval(interval);
+  }, [user, navigate, fetchOrders]);
 
-  if (loading) {
-    return (
-      <div className="p-12 text-center text-brand-green-deep/60">Loading…</div>
-    );
-  }
-
-  if (!user || user.role !== "admin") {
-    return <Navigate to="/login" replace />;
-  }
-
-  function openCreate() {
-    setEditing(null);
-    setForm(emptyItem);
-    setDialogOpen(true);
-  }
-
-  function openEdit(item) {
-    setEditing(item);
-    setForm({
-      name: item.name,
-      slug: item.slug,
-      description: item.description || "",
-      priceKES: item.priceKES,
-      category: item.category,
-      image: item.image || "",
-      popular: !!item.popular,
-      vegan: !!item.vegan,
-      spicy: !!item.spicy,
-    });
-    setDialogOpen(true);
-  }
-
-  async function saveItem(e) {
-    e.preventDefault();
+  async function updateStatus(orderId, newStatus) {
+    setUpdating(orderId);
     try {
-      if (editing) {
-        await api.put(`/api/menu/${editing._id}`, form);
-        toast.success("Menu item updated.");
-      } else {
-        await api.post("/api/menu", form);
-        toast.success("Menu item created.");
-      }
-      setDialogOpen(false);
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.error?.message || "Save failed.");
+      await api.patch(`/api/orders/${orderId}/status`, { status: newStatus });
+      await fetchOrders();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUpdating(null);
     }
   }
 
-  async function removeItem(id) {
-    if (!confirm("Delete this item?")) return;
+  async function rejectOrder(orderId) {
+    if (!confirm("Reject and delete this order?")) return;
+    setUpdating(orderId);
     try {
-      await api.delete(`/api/menu/${id}`);
-      toast.success("Deleted.");
-      load();
-    } catch {
-      toast.error("Delete failed.");
+      await api.delete(`/api/orders/${orderId}`);
+      await fetchOrders();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUpdating(null);
     }
   }
 
-  async function setStatus(orderId, status) {
-    try {
-      await api.patch(`/api/orders/${orderId}/status`, { status });
-      toast.success("Status updated.");
-      load();
-    } catch {
-      toast.error("Update failed.");
-    }
-  }
+  const filtered = filter === "all"
+    ? orders
+    : orders.filter(o => o.status === filter);
+
+  const counts = {
+    all: orders.length,
+    pending: orders.filter(o => o.status === "pending").length,
+    preparing: orders.filter(o => o.status === "preparing").length,
+    out_for_delivery: orders.filter(o => o.status === "out_for_delivery").length,
+    delivered: orders.filter(o => o.status === "delivered").length,
+  };
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="text-4xl mb-4">🍽️</div>
+        <p className="text-gray-500">Loading orders...</p>
+      </div>
+    </div>
+  );
 
   return (
-    <>
-      <Seo
-        title="Admin | Boon Supreme Restaurant"
-        description="Manage menu and orders."
-        path="/admin"
-      />
-      <div className="mx-auto max-w-7xl px-4 py-12 md:px-6">
-        <h1 className="font-display text-4xl font-bold text-brand-green-deep">
-          Admin
-        </h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">🍽️ Boon Supreme</h1>
+            <p className="text-sm text-gray-500">Restaurant Dashboard</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-500">
+              Auto-refreshes every 10s
+            </p>
+            {lastUpdated && (
+              <p className="text-xs text-gray-400">
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </p>
+            )}
+          </div>
+        </div>
 
-        <section className="mt-12">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="font-display text-2xl font-semibold">Menu</h2>
-            <Button variant="gold" onClick={openCreate}>
-              Add item
-            </Button>
-          </div>
-          <div className="mt-6 overflow-x-auto rounded-xl border border-brand-green/10 bg-white">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="border-b border-brand-green/10 bg-brand-cream">
-                <tr>
-                  <th className="p-3 font-semibold">Name</th>
-                  <th className="p-3 font-semibold">Category</th>
-                  <th className="p-3 font-semibold">KES</th>
-                  <th className="p-3 font-semibold">Flags</th>
-                  <th className="p-3 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {menu.map((item) => (
-                  <tr key={item._id} className="border-b border-brand-green/5">
-                    <td className="p-3">{item.name}</td>
-                    <td className="p-3 capitalize">{item.category}</td>
-                    <td className="p-3">{item.priceKES}</td>
-                    <td className="p-3 text-xs">
-                      {[item.popular && "pop", item.vegan && "veg", item.spicy && "spicy"]
-                        .filter(Boolean)
-                        .join(", ") || "—"}
-                    </td>
-                    <td className="p-3 space-x-2">
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(item)}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => removeItem(item._id)}
-                      >
-                        Delete
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="mt-16">
-          <h2 className="font-display text-2xl font-semibold">Orders</h2>
-          <div className="mt-6 space-y-4">
-            {orders.map((o) => (
-              <div
-                key={o._id}
-                className="rounded-xl border border-brand-green/10 bg-white p-4 shadow-sm"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-mono text-xs text-brand-green-deep/60">{o._id}</p>
-                  <span className="rounded-full bg-brand-gold/20 px-3 py-1 text-xs font-semibold capitalize">
-                    {o.status.replace(/_/g, " ")}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm">
-                  {o.customer.name} · {o.customer.phone}
-                </p>
-                <p className="font-semibold text-brand-terracotta">
-                  KES {o.total.toLocaleString()} · {o.paymentMethod}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {["pending", "preparing", "out_for_delivery", "delivered"].map((s) => (
-                    <Button
-                      key={s}
-                      size="sm"
-                      variant={o.status === s ? "gold" : "outline"}
-                      className={
-                        o.status === s
-                          ? ""
-                          : "border-brand-green/20 text-brand-green-deep bg-white"
-                      }
-                      onClick={() => setStatus(o._id, s)}
-                    >
-                      {s.replace(/_/g, " ")}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            {orders.length === 0 ? (
-              <p className="text-sm text-brand-green-deep/60">No orders yet.</p>
-            ) : null}
-          </div>
-        </section>
+        {/* Stats bar */}
+        <div className="max-w-7xl mx-auto px-4 pb-4 flex gap-3 overflow-x-auto">
+          {[
+            { key: "all", label: "All Orders", emoji: "📋" },
+            { key: "pending", label: "New", emoji: "🆕" },
+            { key: "preparing", label: "Preparing", emoji: "👨‍🍳" },
+            { key: "out_for_delivery", label: "On the Way", emoji: "🛵" },
+            { key: "delivered", label: "Delivered", emoji: "✅" },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setFilter(tab.key)}
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+                filter === tab.key
+                  ? "bg-green-700 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {tab.emoji} {tab.label}
+              <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+                filter === tab.key ? "bg-white text-green-700" : "bg-white text-gray-600"
+              }`}>
+                {counts[tab.key]}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        title={editing ? "Edit menu item" : "New menu item"}
-      >
-        <form className="flex flex-col gap-3" onSubmit={saveItem}>
-          <Input
-            placeholder="Name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-          />
-          <Input
-            placeholder="Slug (url)"
-            value={form.slug}
-            onChange={(e) => setForm({ ...form, slug: e.target.value })}
-            required
-          />
-          <textarea
-            className="min-h-[80px] rounded-xl border border-brand-green/20 px-4 py-2 text-sm"
-            placeholder="Description"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-          <Input
-            type="number"
-            placeholder="Price KES"
-            value={form.priceKES}
-            onChange={(e) =>
-              setForm({ ...form, priceKES: Number(e.target.value) })
-            }
-            required
-          />
-          <select
-            className="h-11 rounded-xl border border-brand-green/20 px-4 text-sm"
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-          >
-            <option value="mains">mains</option>
-            <option value="sides">sides</option>
-            <option value="vegan">vegan</option>
-            <option value="drinks">drinks</option>
-          </select>
-          <Input
-            placeholder="Image URL"
-            value={form.image}
-            onChange={(e) => setForm({ ...form, image: e.target.value })}
-          />
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.popular}
-              onChange={(e) => setForm({ ...form, popular: e.target.checked })}
-            />
-            Popular
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.vegan}
-              onChange={(e) => setForm({ ...form, vegan: e.target.checked })}
-            />
-            Vegan
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.spicy}
-              onChange={(e) => setForm({ ...form, spicy: e.target.checked })}
-            />
-            Spicy
-          </label>
-          <Button type="submit" variant="gold">
-            Save
-          </Button>
-        </form>
-      </Dialog>
-    </>
+      {/* Orders */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {filtered.length === 0 ? (
+          <div className="text-center py-24">
+            <div className="text-6xl mb-4">🎉</div>
+            <p className="text-xl font-semibold text-gray-700">No orders here</p>
+            <p className="text-gray-400 mt-2">
+              {filter === "pending" ? "All caught up! No new orders." : "Nothing to show for this filter."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filtered.map(order => (
+              <div
+                key={order._id}
+                className={`bg-white rounded-2xl shadow-sm border-2 transition-all ${
+                  order.status === "pending" ? "border-yellow-300" : "border-transparent"
+                }`}
+              >
+                {/* Order header */}
+                <div className="p-4 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-xs text-gray-400">
+                      #{order._id.slice(-6).toUpperCase()}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${STATUS_COLORS[order.status]}`}>
+                      {STATUS_LABELS[order.status]}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-gray-900">{order.customer.name}</p>
+                      <p className="text-sm text-gray-500">{order.customer.phone}</p>
+                      {order.customer.address && (
+                        <p className="text-xs text-gray-400 mt-1">📍 {order.customer.address}</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold text-green-700">
+                        KES {order.total.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-400 capitalize">
+                        💳 {order.paymentMethod}
+                        {order.mpesaCode && ` · ${order.mpesaCode}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Order items */}
+                <div className="p-4 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Items</p>
+                  <div className="space-y-1">
+                    {order.items.map((item, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-gray-700">
+                          {item.qty}x {item.menuItemId?.name || "Item"}
+                        </span>
+                        <span className="text-gray-500">
+                          KES {(item.price * item.qty).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Time */}
+                <div className="px-4 pt-3 pb-2">
+                  <p className="text-xs text-gray-400">
+                    🕐 {new Date(order.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Actions */}
+                {NEXT_ACTION[order.status] && (
+                  <div className="p-4 pt-2 flex gap-2">
+                    <button
+                      onClick={() => updateStatus(order._id, NEXT_ACTION[order.status].next)}
+                      disabled={updating === order._id}
+                      className="flex-1 bg-green-700 text-white py-2 px-4 rounded-xl text-sm font-bold hover:bg-green-800 disabled:opacity-50 transition-all"
+                    >
+                      {updating === order._id ? "Updating..." : NEXT_ACTION[order.status].label}
+                    </button>
+                    {order.status === "pending" && (
+                      <button
+                        onClick={() => rejectOrder(order._id)}
+                        disabled={updating === order._id}
+                        className="px-4 py-2 rounded-xl text-sm font-bold text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50 transition-all"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
